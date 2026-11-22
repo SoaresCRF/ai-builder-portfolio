@@ -10,8 +10,8 @@ Someone in finance opens each email, reads the PDF or photo, and types vendor, t
 
 Two n8n workflows:
 
-- **Ingest**: every email sent to a dedicated `+invoices` address with a PDF or image attachment is read, extracted with Gemini (strict JSON schema), and **validated in code**. Any field the document does not support is set to empty and the row is marked `needs_review` with a reason code. Nothing is dropped silently: a failed extraction still produces a row.
-- **Digest**: every day at 08:00 (America/Sao_Paulo) one email lists the `pending` bills that are due within 3 days or already overdue, plus a count of documents that need review.
+- **Ingest**: every email sent to a dedicated `+invoices` address with a PDF or image attachment is read, extracted with Gemini (strict JSON schema), and **validated in code**. Any field the document does not support is set to empty and the row is marked `needs_review` with a reason code. A failed extraction still produces a row. Attachments that are not a PDF or an image go to the `Unsupported (dropped)` node and get no row.
+- **Digest**: every day at 08:00 (America/Sao_Paulo) one email lists the `pending` bills that are due within 3 days or already overdue, plus a count of documents that need review. When nothing is due, no email is sent, so the needs-review count only reaches you on days with due bills.
 
 The pattern is the same as in `meeting-notes-api`: schema-constrained model output plus grounding in code.
 
@@ -81,13 +81,17 @@ Open <http://localhost:5678> and create the owner account.
 
 1. Create a Google Cloud project, then enable the **Gmail API** and the **Google Sheets API**.
 2. Configure the OAuth consent screen (External, status **Testing**) and add your account as a test user.
-3. Add only these scopes: Gmail **labels** and Gmail **"Read, compose, and send"**, and Sheets plus `drive.file`.
+3. Add only these scopes, and do not grant the full-mailbox "permanently delete" scope:
+   - Gmail: "See and edit your email labels"
+   - Gmail: "Read, compose, and send emails from your Gmail account"
+   - Sheets: "See, edit, create, and delete all your Google Sheets spreadsheets"
+   - Drive: "See, edit, create, and delete only the specific Google Drive files you use with this app" (`drive.file`)
 4. Create an OAuth client of type **Web application** with redirect URI `http://localhost:5678/rest/oauth2-credential/callback`.
 5. Keep the client id and secret for the next step. They go into n8n only, never into this repo.
 
 ### 3. n8n credentials
 
-In n8n, create three credentials with exactly these names (the workflows reference them):
+In n8n, create three credentials. The names below are suggestions; the committed workflow JSON has no credential references, so after importing you select them on each node:
 
 - `Gmail account`: Gmail OAuth2, using the client id and secret from step 2. Click connect and approve.
 - `Google Sheets account`: Google Sheets OAuth2, same client.
@@ -107,9 +111,10 @@ receivedAt, messageId, fileName, documentType, vendorName, vendorTaxId, amount, 
 
 | Cell | Content |
 |---|---|
-| A2 / B2 | label, then `=SUMPRODUCT((LEFT(Invoices!A2:A,7)=TEXT(TODAY(),"yyyy-mm"))*(Invoices!K2:K<>"error")*(Invoices!A2:A<>""))` |
-| A3 / B3 | label ("manual minutes per document"), then `4` |
-| A4 / B4 | label ("hours saved"), then `=B2*B3/60` |
+| A1 / B1 / C1 | `Metric`, `Value`, `Note` |
+| A2 / B2 | `Documents processed this month`, then `=SUMPRODUCT((LEFT(Invoices!A2:A,7)=TEXT(TODAY(),"yyyy-mm"))*(Invoices!K2:K<>"error")*(Invoices!A2:A<>""))` |
+| A3 / B3 | `Manual minutes per document (assumption)`, then `4` |
+| A4 / B4 | `Hours saved this month`, then `=B2*B3/60` |
 
 B2 counts the rows received this month whose `extractionStatus` is not `error`.
 
@@ -132,7 +137,7 @@ npm test      # node --test, no network and no API key needed
 
 ## Sample data
 
-`samples/` holds 9 fictional documents (invented companies and CNPJs with valid check digits, none real): 3 DANFE PDFs (one with 3 installments, "duplicatas"), 3 boleto PDFs, 1 boleto with a wrong check digit, and 2 scanned PNGs (rotation and noise). `samples/expected.json` lists the values each file should produce, and the unit tests use it.
+`samples/` holds 9 fictional documents (invented companies and CNPJs with valid check digits, none real): 3 DANFE PDFs (one with 3 installments, "duplicatas"), 3 boleto PDFs, 1 boleto with a wrong check digit, and 2 scanned PNGs (rotation and noise). `samples/expected.json` is the reference of what each sample should extract; I used it for the end-to-end comparison against the sheet rows.
 
 Due dates are relative to the generation day, so regenerate before a demo, otherwise nothing falls into the digest window:
 
@@ -148,7 +153,7 @@ I emailed the 9 sample documents to the `+invoices` address. All 9 extracted row
 
 ![Invoices sheet with 11 rows](docs/media/invoices-sheet.png)
 
-Digest test: the email said "Bills due soon: 4". After I set one row to `paid`, the next run said "Bills due soon: 3".
+Digest test: the email subject said "Bills due soon: 4". After I set one row to `paid`, the next run said "Bills due soon: 3".
 
 ![Digest workflow canvas: Daily 08:00 and Run now to Read Invoices, Digest, Send digest](docs/media/digest-workflow.png)
 
