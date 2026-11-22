@@ -137,7 +137,7 @@ npm test      # node --test, no network and no API key needed
 
 ## Sample data
 
-`samples/` holds 9 fictional documents (invented companies and CNPJs with valid check digits, none real): 3 DANFE PDFs (one with 3 installments, "duplicatas"), 3 boleto PDFs, 1 boleto with a wrong check digit, and 2 scanned PNGs (rotation and noise). `samples/expected.json` is the reference of what each sample should extract; I used it for the end-to-end comparison against the sheet rows.
+`samples/` holds 9 fictional documents (the companies, invoices and amounts are fictional; CNPJs are generated with valid check digits from random roots, so they may coincide with real registrations): 3 DANFE PDFs (one with 3 installments, "duplicatas"), 3 boleto PDFs, 1 boleto with a wrong check digit, and 2 scanned PNGs (rotation and noise). `samples/expected.json` is the reference of what each sample should extract; I used it for the end-to-end comparison against the sheet rows.
 
 Due dates are relative to the generation day, so regenerate before a demo, otherwise nothing falls into the digest window:
 
@@ -174,8 +174,10 @@ The `Metrics` tab computes hours saved as `documents this month x manual minutes
 
 - A Gemini error, or invalid JSON after one retry, still writes a row with `extractionStatus = error` and the reason in `reviewReasons`.
 - If PDF text extraction fails, the document is still processed; it just has no text layer to ground against (`pdfText` is empty).
-- A Google Sheets read or append failure fails the execution. Re-run it from the n8n Executions list.
-- An `error` row blocks re-processing of that attachment (dedup key `messageId:fileName`). To retry, delete the row and re-run.
+- A Google Sheets read or append failure fails the execution.
+- An `error` row blocks re-processing of that attachment (dedup key `messageId:fileName`), and re-running from Executions does not retry it. To recover, delete the row, then re-send or forward the attachment to the `+invoices` address. The new email has a new message id, so dedup does not block it.
+- Due dates edited by hand must be typed as `YYYY-MM-DD` plain text. Any other format (or a date the sheet converted) is ignored by the digest.
+- The needs-review count in the digest excludes `paid` rows. To clear an item after reviewing it, fix the fields and set `extractionStatus` to `ok` (or mark it `paid`).
 
 ## Security & limits
 
@@ -190,3 +192,4 @@ The `Metrics` tab computes hours saved as `documents this month x manual minutes
   - Payment booklets (one PDF with several boletos): the row becomes `needs_review` with `multiple_boletos`.
   - Convenio boletos (48-digit lines, utilities and taxes): they fail the 47-digit check and are flagged `digitable_line_invalid`.
   - Invoices paid without a boleto (PIX, transfer): they produce no alert.
+  - Inline images (for example signature logos) count as attachments and may produce `other` or `needs_review` rows.
