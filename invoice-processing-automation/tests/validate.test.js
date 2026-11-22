@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { isValidCnpj, parseDigitableLine } = require('../src/validate.js');
+const { isValidCnpj, parseDigitableLine, validateExtraction } = require('../src/validate.js');
 
 test('isValidCnpj accepts numeric, formatted and alphanumeric', () => {
   assert.equal(isValidCnpj('11222333000181'), true);
@@ -61,4 +61,90 @@ test('parseDigitableLine: zero factor and zero amount give nulls', () => {
 test('parseDigitableLine handles factor reset boundary', () => {
   assert.equal(parseDigitableLine(buildLine('9999', '0000000100'), '2025-02-10').dueDate, '2025-02-21');
   assert.equal(parseDigitableLine(buildLine('1000', '0000000100'), '2025-03-01').dueDate, '2025-02-22');
+});
+
+const NOW = '2026-11-22T12:00:00Z';
+const CNPJ = '11222333000181';
+const BOLETO = {
+  documentType: 'boleto', vendorName: 'ACME Ltda', vendorTaxId: CNPJ, amount: 1234.56,
+  dueDate: '2026-12-10', issueDate: '2026-11-01', category: 'utilities', digitableLine: LINE,
+  boletoCount: 1, sources: { amount: null, dueDate: null, vendorTaxId: null },
+};
+const NFE = { ...BOLETO, documentType: 'nfe', dueDate: null, digitableLine: null };
+const run = (e, pdfText = null) => validateExtraction(e, { pdfText, processedAt: NOW });
+
+test('valid boleto is ok and pending', () => {
+  const r = run(BOLETO);
+  assert.equal(r.extractionStatus, 'ok'); assert.deepEqual(r.reasons, []);
+  assert.equal(r.record.status, 'pending'); assert.equal(r.record.amount, 1234.56);
+});
+test('line overrides model amount and records mismatch', () => {
+  const r = run({ ...BOLETO, amount: 1243.56 });
+  assert.equal(r.record.amount, 1234.56); assert.ok(r.reasons.includes('amount_mismatch_line'));
+  assert.equal(r.extractionStatus, 'needs_review');
+});
+test('line overrides model due date and records mismatch', () => {
+  const r = run({ ...BOLETO, dueDate: '2026-12-11' });
+  assert.equal(r.record.dueDate, '2026-12-10'); assert.ok(r.reasons.includes('due_date_mismatch_line'));
+});
+test('invalid digitable line is nulled', () => {
+  const r = run({ ...BOLETO, digitableLine: LINE.slice(1) });
+  assert.equal(r.record.digitableLine, null);
+  assert.ok(r.reasons.includes('digitable_line_invalid'));
+  assert.ok(r.reasons.includes('missing_digitableLine'));
+});
+test('invalid CNPJ is nulled', () => {
+  const r = run({ ...BOLETO, vendorTaxId: '11222333000182' });
+  assert.equal(r.record.vendorTaxId, null); assert.ok(r.reasons.includes('cnpj_invalid'));
+  assert.equal(r.extractionStatus, 'needs_review');
+});
+test('vendorTaxId is normalized to digits/uppercase', () => {
+  assert.equal(run({ ...BOLETO, vendorTaxId: '11.222.333/0001-81' }).record.vendorTaxId, CNPJ);
+});
+test('nfe is n/a and needs no due date', () => {
+  const r = run(NFE);
+  assert.equal(r.record.status, 'n/a'); assert.equal(r.extractionStatus, 'ok');
+});
+test('boleto missing line needs review', () => {
+  const r = run({ ...BOLETO, digitableLine: null });
+  assert.ok(r.reasons.includes('missing_digitableLine')); assert.equal(r.extractionStatus, 'needs_review');
+});
+test('other with due date is pending, without is n/a', () => {
+  assert.equal(run({ ...NFE, documentType: 'other', dueDate: '2026-12-10' }).record.status, 'pending');
+  assert.equal(run({ ...NFE, documentType: 'other' }).record.status, 'n/a');
+});
+test('multiple boletos flagged', () => {
+  const r = run({ ...BOLETO, boletoCount: 2 });
+  assert.ok(r.reasons.includes('multiple_boletos'));
+});
+test('due date out of range', () => {
+  const r = run({ ...NFE, dueDate: '2028-01-10' });
+  assert.ok(r.reasons.includes('due_date_out_of_range')); assert.equal(r.record.dueDate, null);
+});
+test('malformed due date and non-positive amount are rejected', () => {
+  const r = run({ ...NFE, dueDate: '10/12/2026', amount: 0 });
+  assert.ok(r.reasons.includes('due_date_invalid'));
+  assert.ok(r.reasons.includes('amount_invalid'));
+  assert.ok(r.reasons.includes('missing_amount'));
+  assert.equal(r.record.amount, null);
+});
+test('reasons have no duplicates', () => {
+  const r = run({ ...BOLETO, digitableLine: null, amount: null, dueDate: null });
+  assert.equal(new Set(r.reasons).size, r.reasons.length);
+});
+test('amount grounding accepts Brazilian formats', () => {
+  for (const t of ['Total R$ 1.234,56', 'VALOR 1234,56']) {
+    const r = run(NFE, t + ' CNPJ 11.222.333/0001-81');
+    assert.ok(!r.reasons.includes('amount_not_in_text'), t);
+  }
+  const bad = run(NFE, 'Total 11.234,56 CNPJ 11222333000181');
+  assert.ok(bad.reasons.includes('amount_not_in_text')); assert.equal(bad.record.amount, null);
+});
+test('CNPJ grounding accepts formatted or digits', () => {
+  assert.ok(!run(NFE, 'R$ 1.234,56 CNPJ 11222333000181').reasons.includes('cnpj_not_in_text'));
+  const r = run(NFE, 'R$ 1.234,56 CNPJ 99999999000191');
+  assert.ok(r.reasons.includes('cnpj_not_in_text')); assert.equal(r.record.vendorTaxId, null);
+});
+test('empty pdfText skips text grounding', () => {
+  assert.ok(!run(NFE, '').reasons.some((x) => x.endsWith('_not_in_text')));
 });

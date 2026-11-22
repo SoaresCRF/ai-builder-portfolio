@@ -9,6 +9,14 @@ const FACTOR_RESET_MIN = 1000; // factor restarted at 1000 after 9999 on 2025-02
 const MS_PER_DAY = 86400000;
 const PRE_RESET_BASE = '1997-10-07'; // factor 0 of the original scheme
 const POST_RESET_BASE = '2025-02-22'; // factor 1000 of the restarted scheme
+const MAX_DUE_DATE_DRIFT_DAYS = 365;
+const REFERENCE_TIME_ZONE = 'America/Sao_Paulo';
+const ISO_DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
+const REQUIRED_FIELDS = {
+  boleto: ['amount', 'dueDate', 'digitableLine'],
+  nfe: ['vendorTaxId', 'amount'],
+  other: ['amount'],
+};
 
 function cnpjDigit(chars, weights) {
   // Alphanumeric CNPJ: character value is charCode - 48 ('0'..'9' -> 0..9, 'A' -> 17).
@@ -72,4 +80,92 @@ function parseDigitableLine(line, referenceDate) {
   };
 }
 
-module.exports = { isValidCnpj, parseDigitableLine };
+function referenceDateOf(processedAt) {
+  // en-CA formats as YYYY-MM-DD; the zone keeps late-evening runs on the Brazilian calendar day.
+  return new Intl.DateTimeFormat('en-CA', { timeZone: REFERENCE_TIME_ZONE }).format(new Date(processedAt));
+}
+
+function isRealIsoDate(value) {
+  return ISO_DATE_PATTERN.test(value) && addDays(value, 0) === value;
+}
+
+function normalizeTaxId(value) {
+  return value == null ? null : String(value).replace(/[./\-\s]/g, '').toUpperCase();
+}
+
+function formatCnpj(c) {
+  return `${c.slice(0, 2)}.${c.slice(2, 5)}.${c.slice(5, 8)}/${c.slice(8, 12)}-${c.slice(12)}`;
+}
+
+function formatBrl(amount) {
+  const [int, frac] = amount.toFixed(2).split('.');
+  return { plain: `${int},${frac}`, grouped: `${int.replace(/\B(?=(\d{3})+$)/g, '.')},${frac}` };
+}
+
+function amountInText(amount, text) {
+  const { plain, grouped } = formatBrl(amount);
+  const esc = (s) => s.replace(/\./g, '\\.');
+  // Boundaries stop "1.234,56" from matching inside "11.234,56" or "1.234,567".
+  const re = new RegExp(`(?<![\\d.,])(?:${esc(grouped)}|${esc(plain)})(?!\\d|,\\d)`);
+  return re.test(text);
+}
+
+function applyLine(x, referenceDate, fail) {
+  if (x.digitableLine == null) return;
+  const line = parseDigitableLine(x.digitableLine, referenceDate);
+  if (!line) { fail('digitable_line_invalid'); x.digitableLine = null; return; }
+  x.digitableLine = String(x.digitableLine).replace(/\D/g, '');
+  for (const f of ['amount', 'dueDate']) {
+    if (line[f] == null) continue;
+    if (x[f] != null && x[f] !== line[f]) fail(f === 'amount' ? 'amount_mismatch_line' : 'due_date_mismatch_line');
+    x[f] = line[f];
+  }
+}
+
+function checkAmountAndDate(x, referenceDate, fail) {
+  if (x.amount != null) {
+    x.amount = Math.round(Number(x.amount) * 100) / 100;
+    if (!(x.amount > 0)) { fail('amount_invalid'); x.amount = null; }
+  }
+  if (x.dueDate == null) return;
+  if (!isRealIsoDate(x.dueDate)) { fail('due_date_invalid'); x.dueDate = null; return; }
+  const days = Math.abs(Date.parse(x.dueDate) - Date.parse(referenceDate)) / MS_PER_DAY;
+  if (days > MAX_DUE_DATE_DRIFT_DAYS) { fail('due_date_out_of_range'); x.dueDate = null; }
+}
+
+function groundInText(x, pdfText, fail) {
+  if (typeof pdfText !== 'string' || pdfText === '') return;
+  if (x.amount != null && !amountInText(x.amount, pdfText)) { fail('amount_not_in_text'); x.amount = null; }
+  if (x.vendorTaxId != null && !pdfText.includes(x.vendorTaxId) && !pdfText.includes(formatCnpj(x.vendorTaxId))) {
+    fail('cnpj_not_in_text'); x.vendorTaxId = null;
+  }
+}
+
+function payableStatus(x) {
+  if (x.documentType === 'boleto') return 'pending';
+  return x.documentType === 'other' && x.dueDate != null ? 'pending' : 'n/a';
+}
+
+function validateExtraction(extraction, ctx) {
+  const reasons = [];
+  const fail = (code) => { if (!reasons.includes(code)) reasons.push(code); };
+  const x = { ...extraction, vendorTaxId: normalizeTaxId(extraction.vendorTaxId) };
+  const referenceDate = referenceDateOf(ctx.processedAt);
+
+  if (x.vendorTaxId != null && !isValidCnpj(x.vendorTaxId)) { fail('cnpj_invalid'); x.vendorTaxId = null; }
+  applyLine(x, referenceDate, fail);
+  checkAmountAndDate(x, referenceDate, fail);
+  groundInText(x, ctx.pdfText, fail);
+  if (x.boletoCount > 1) fail('multiple_boletos');
+  // Checked after nulling so a field rejected above also counts as missing.
+  for (const f of REQUIRED_FIELDS[x.documentType] || []) if (x[f] == null) fail(`missing_${f}`);
+
+  const record = {
+    documentType: x.documentType, vendorName: x.vendorName, vendorTaxId: x.vendorTaxId,
+    amount: x.amount, dueDate: x.dueDate, category: x.category, digitableLine: x.digitableLine,
+    status: payableStatus(x),
+  };
+  return { record, reasons, extractionStatus: reasons.length ? 'needs_review' : 'ok' };
+}
+
+module.exports = { isValidCnpj, parseDigitableLine, validateExtraction };
