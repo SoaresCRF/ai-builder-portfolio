@@ -33,8 +33,8 @@ function escapeHtml(value) {
 }
 
 function formatBrl(amount) {
+  if (amount === '' || amount == null || Number.isNaN(Number(amount))) return '';
   const n = Number(amount);
-  if (Number.isNaN(n)) return '';
   return 'R$ ' + n.toFixed(2).replace('.', ',').replace(/\B(?=(\d{3})+(?!\d))/g, '.');
 }
 
@@ -45,7 +45,7 @@ function formatDate(iso) {
 
 function renderRow(r) {
   const flags = [r.overdue ? 'OVERDUE' : '', r.needsReview ? 'REVIEW' : ''].filter(Boolean).join(' ');
-  const cells = [escapeHtml(r.vendor), formatBrl(r.amount), formatDate(r.dueDate), flags];
+  const cells = [escapeHtml(r.vendorName), formatBrl(r.amount), formatDate(r.dueDate), flags];
   return `<tr>${cells.map((c) => `<td>${c}</td>`).join('')}</tr>`;
 }
 

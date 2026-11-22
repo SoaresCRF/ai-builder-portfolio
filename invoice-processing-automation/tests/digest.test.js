@@ -3,8 +3,8 @@ const assert = require('node:assert');
 const { selectDueRows, renderDigestHtml } = require('../src/digest.js');
 
 const TODAY = '2026-11-22';
-const row = (vendor, dueDate, extra = {}) => ({
-  vendor, amount: '100', dueDate, status: 'pending', extractionStatus: 'ok', ...extra,
+const row = (vendorName, dueDate, extra = {}) => ({
+  vendorName, amount: '100', dueDate, status: 'pending', extractionStatus: 'ok', ...extra,
 });
 
 test('selects pending rows inside the window and flags overdue', () => {
@@ -21,7 +21,7 @@ test('selects pending rows inside the window and flags overdue', () => {
     row('review', '2026-11-23', { extractionStatus: 'needs_review' }),
   ];
   const { dueRows, needsReviewCount } = selectDueRows(rows, TODAY, 3);
-  assert.deepStrictEqual(dueRows.map((r) => r.vendor), ['yesterday', 'today', 'review', 'plus3']);
+  assert.deepStrictEqual(dueRows.map((r) => r.vendorName), ['yesterday', 'today', 'review', 'plus3']);
   assert.strictEqual(dueRows[0].overdue, true);
   assert.strictEqual(dueRows[1].overdue, false);
   assert.strictEqual(dueRows[2].needsReview, true);
@@ -50,5 +50,16 @@ test('renders BRL amount, dd/mm/yyyy date, text flags and escapes vendor', () =>
   assert.match(html, /OVERDUE/);
   assert.match(html, /REVIEW/);
   assert.match(html, /&lt;b&gt;/);
+  assert.match(html, /<td>ok<\/td>/);
+  assert.match(html, /Documents needing review: 1/);
   assert.ok(!html.includes('<b>'));
+});
+
+test('empty or missing amount renders empty, not R$ 0,00', () => {
+  const html = renderDigestHtml({ dueRows: [row('v', '2026-11-22', { amount: '' }), row('w', '2026-11-22', { amount: null })], needsReviewCount: 0 }, TODAY);
+  assert.ok(!html.includes('R$'));
+});
+
+test('empty dueRows renders without throwing', () => {
+  assert.match(renderDigestHtml({ dueRows: [], needsReviewCount: 2 }, TODAY), /Documents needing review: 2/);
 });
