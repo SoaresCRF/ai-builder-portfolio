@@ -1,0 +1,83 @@
+[
+  {
+    "file": "nfe-1.pdf",
+    "documentType": "nfe",
+    "vendorTaxId": "39646742000124",
+    "amount": 1405,
+    "dueDate": null,
+    "digitableLine": null,
+    "expectedStatus": "ok"
+  },
+  {
+    "file": "nfe-2.pdf",
+    "documentType": "nfe",
+    "vendorTaxId": "55857222000117",
+    "amount": 2530,
+    "dueDate": null,
+    "digitableLine": null,
+    "expectedStatus": "ok"
+  },
+  {
+    "file": "nfe-3-duplicatas.pdf",
+    "documentType": "nfe",
+    "vendorTaxId": "10265980000108",
+    "amount": 1350,
+    "dueDate": null,
+    "digitableLine": null,
+    "expectedStatus": "ok"
+  },
+  {
+    "file": "boleto-d1.pdf",
+    "documentType": "boleto",
+    "vendorTaxId": "97833555000156",
+    "amount": 429.69,
+    "dueDate": "2026-11-23",
+    "digitableLine": "00194435140064522323178493026534116390000042969",
+    "expectedStatus": "ok"
+  },
+  {
+    "file": "boleto-d3.pdf",
+    "documentType": "boleto",
+    "vendorTaxId": "90591537000166",
+    "amount": 647.85,
+    "dueDate": "2026-11-25",
+    "digitableLine": "00196646719455425060828578601156816410000064785",
+    "expectedStatus": "ok"
+  },
+  {
+    "file": "boleto-d10.pdf",
+    "documentType": "boleto",
+    "vendorTaxId": "17563915000108",
+    "amount": 3890.51,
+    "dueDate": "2026-12-02",
+    "digitableLine": "00195002976748632811466706445120716480000389051",
+    "expectedStatus": "ok"
+  },
+  {
+    "file": "boleto-invalid-dv.pdf",
+    "documentType": "boleto",
+    "vendorTaxId": "16698002000136",
+    "amount": 2048.68,
+    "dueDate": "2026-11-27",
+    "digitableLine": "00198395395564356969681866449911316430000204868",
+    "expectedStatus": "needs_review"
+  },
+  {
+    "file": "nfe-scan.png",
+    "documentType": "nfe",
+    "vendorTaxId": "39646742000124",
+    "amount": 1405,
+    "dueDate": null,
+    "digitableLine": null,
+    "expectedStatus": "ok"
+  },
+  {
+    "file": "boleto-scan.png",
+    "documentType": "boleto",
+    "vendorTaxId": "90591537000166",
+    "amount": 647.85,
+    "dueDate": "2026-11-25",
+    "digitableLine": "00196646719455425060828578601156816410000064785",
+    "expectedStatus": "ok"
+  }
+]

@@ -1,0 +1,7 @@
+{
+  "name": "invoice-processing-automation",
+  "private": true,
+  "scripts": {
+    "test": "node --test"
+  }
+}

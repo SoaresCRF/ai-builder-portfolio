@@ -1,0 +1,17 @@
+services:
+  n8n:
+    image: docker.n8n.io/n8nio/n8n:2.48.7
+    restart: unless-stopped
+    ports:
+      # Localhost only: the instance holds Gmail/Sheets OAuth tokens.
+      - "127.0.0.1:5678:5678"
+    volumes:
+      - ./n8n-data:/home/node/.n8n
+    env_file: .env
+    environment:
+      - GENERIC_TIMEZONE=America/Sao_Paulo
+      - TZ=America/Sao_Paulo
+      # Workflows read INVOICE_INBOX, GEMINI_MODEL, SHEET_ID, DIGEST_WINDOW_DAYS via $env.
+      # Trade-off: this also exposes every .env value (incl. N8N_ENCRYPTION_KEY) to Code
+      # nodes; acceptable for a single-user, localhost-only instance.
+      - N8N_BLOCK_ENV_ACCESS_IN_NODE=false

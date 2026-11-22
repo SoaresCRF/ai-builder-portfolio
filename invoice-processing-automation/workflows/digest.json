@@ -1,0 +1,151 @@
+{
+  "id": "InvoiceDigest001",
+  "name": "Invoice digest",
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "America/Sao_Paulo"
+  },
+  "pinData": {},
+  "nodes": [
+    {
+      "name": "Daily 08:00",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "days",
+              "daysInterval": 1,
+              "triggerAtHour": 8
+            }
+          ]
+        }
+      },
+      "id": "d1000000-0000-4000-8000-000000000001",
+      "position": [
+        0,
+        0
+      ]
+    },
+    {
+      "name": "Run now",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "parameters": {},
+      "id": "d1000000-0000-4000-8000-000000000002",
+      "position": [
+        0,
+        200
+      ]
+    },
+    {
+      "name": "Read Invoices",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "executeOnce": true,
+      "alwaysOutputData": true,
+      "parameters": {
+        "operation": "read",
+        "documentId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $env.SHEET_ID }}"
+        },
+        "sheetName": {
+          "__rl": true,
+          "mode": "name",
+          "value": "Invoices"
+        },
+        "options": {}
+      },
+      "id": "d1000000-0000-4000-8000-000000000003",
+      "position": [
+        240,
+        100
+      ]
+    },
+    {
+      "name": "Digest",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "// <lib>\n// Daily digest of pending bills. Kept free of require/import so the file\n// can be injected into an n8n Code node unchanged.\n\nconst DATE_RE = /^\\d{4}-\\d{2}-\\d{2}$/;\nconst MS_PER_DAY = 86400000;\n\n// Dates are plain YYYY-MM-DD text; UTC math avoids any timezone shift.\nfunction addDays(isoDate, days) {\n  return new Date(Date.parse(`${isoDate}T00:00:00Z`) + days * MS_PER_DAY).toISOString().slice(0, 10);\n}\n\nfunction hasValidDate(row) {\n  return DATE_RE.test(row.dueDate || '') && !Number.isNaN(Date.parse(`${row.dueDate}T00:00:00Z`));\n}\n\nfunction isReviewStatus(row) {\n  return row.extractionStatus === 'needs_review' || row.extractionStatus === 'error';\n}\n\nfunction selectDueRows(rows, today, windowDays) {\n  const limit = addDays(today, windowDays);\n  const dueRows = rows\n    .filter((r) => r.status === 'pending' && hasValidDate(r) && r.dueDate <= limit)\n    .map((r) => ({ ...r, overdue: r.dueDate < today, needsReview: isReviewStatus(r) }))\n    .sort((a, b) => a.dueDate.localeCompare(b.dueDate));\n  return { dueRows, needsReviewCount: rows.filter((r) => isReviewStatus(r) && r.status !== 'paid').length };\n}\n\nconst HTML_ESCAPES = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '\"': '&quot;', \"'\": '&#39;' };\n\nfunction escapeHtml(value) {\n  return String(value ?? '').replace(/[&<>\"']/g, (c) => HTML_ESCAPES[c]);\n}\n\nfunction formatBrl(amount) {\n  if (amount === '' || amount == null || Number.isNaN(Number(amount))) return '';\n  const n = Number(amount);\n  return 'R$ ' + n.toFixed(2).replace('.', ',').replace(/\\B(?=(\\d{3})+(?!\\d))/g, '.');\n}\n\nfunction formatDate(iso) {\n  const [y, m, d] = iso.split('-');\n  return `${d}/${m}/${y}`;\n}\n\nfunction renderRow(r) {\n  const flags = [r.overdue ? 'OVERDUE' : '', r.needsReview ? 'REVIEW' : ''].filter(Boolean).join(' ');\n  const cells = [escapeHtml(r.vendorName), formatBrl(r.amount), formatDate(r.dueDate), flags];\n  return `<tr>${cells.map((c) => `<td>${c}</td>`).join('')}</tr>`;\n}\n\nfunction renderDigestHtml(result, today) {\n  const head = ['Vendor', 'Amount', 'Due date', 'Flags'].map((h) => `<th scope=\"col\">${h}</th>`).join('');\n  const body = result.dueRows.map(renderRow).join('');\n  return [\n    `<p>Bills due soon as of ${formatDate(today)}.</p>`,\n    `<table border=\"1\" cellpadding=\"6\" cellspacing=\"0\"><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table>`,\n    `<p>Documents needing review: ${result.needsReviewCount}</p>`,\n  ].join('\\n');\n}\n// </lib>\n\nconst DEFAULT_WINDOW_DAYS = 3;\nconst TIME_ZONE = 'America/Sao_Paulo';\n// en-CA formats as YYYY-MM-DD, the format the sheet stores dates in.\nconst today = new Intl.DateTimeFormat('en-CA', { timeZone: TIME_ZONE }).format(new Date());\nconst windowDays = Number($env.DIGEST_WINDOW_DAYS) || DEFAULT_WINDOW_DAYS;\nconst result = selectDueRows($input.all().map((i) => i.json), today, windowDays);\nif (result.dueRows.length === 0) return [];\nreturn [{ json: { subject: `Bills due soon: ${result.dueRows.length}`, html: renderDigestHtml(result, today) } }];"
+      },
+      "id": "d1000000-0000-4000-8000-000000000004",
+      "position": [
+        480,
+        100
+      ]
+    },
+    {
+      "name": "Send digest",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "parameters": {
+        "resource": "message",
+        "operation": "send",
+        "sendTo": "={{ $env.INVOICE_INBOX }}",
+        "subject": "={{ $json.subject }}",
+        "emailType": "html",
+        "message": "={{ $json.html }}",
+        "options": {
+          "appendAttribution": false
+        }
+      },
+      "id": "d1000000-0000-4000-8000-000000000005",
+      "position": [
+        720,
+        100
+      ]
+    }
+  ],
+  "connections": {
+    "Daily 08:00": {
+      "main": [
+        [
+          {
+            "node": "Read Invoices",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Run now": {
+      "main": [
+        [
+          {
+            "node": "Read Invoices",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read Invoices": {
+      "main": [
+        [
+          {
+            "node": "Digest",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Digest": {
+      "main": [
+        [
+          {
+            "node": "Send digest",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  }
+}
