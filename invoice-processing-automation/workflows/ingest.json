@@ -1,0 +1,565 @@
+{
+  "id": "InvoiceIngest001",
+  "name": "Invoice ingest",
+  "active": false,
+  "nodes": [
+    {
+      "name": "Gmail Trigger",
+      "type": "n8n-nodes-base.gmailTrigger",
+      "typeVersion": 1.3,
+      "parameters": {
+        "pollTimes": {
+          "item": [
+            {
+              "mode": "everyMinute"
+            }
+          ]
+        },
+        "simple": false,
+        "filters": {
+          "q": "=to:{{ $env.INVOICE_INBOX }} has:attachment",
+          "readStatus": "both"
+        },
+        "options": {
+          "downloadAttachments": true
+        }
+      },
+      "id": "9076253f-aec6-4a32-a026-5bdc41cf5c5b",
+      "position": [
+        0,
+        0
+      ]
+    },
+    {
+      "name": "Split attachments",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "// Gmail Trigger puts each attachment under its own binary key (attachment_0, attachment_1, ...).\n// Downstream nodes expect one file per item under \"data\".\nconst out = [];\n$input.all().forEach((item, i) => {\n  for (const bin of Object.values(item.binary ?? {})) {\n    out.push({\n      json: { messageId: item.json.id, fileName: bin.fileName, mimeType: bin.mimeType },\n      binary: { data: bin },\n      pairedItem: { item: i },\n    });\n  }\n});\nreturn out;"
+      },
+      "id": "7b70186c-9207-44f3-b3a9-e8a6e7aef329",
+      "position": [
+        220,
+        0
+      ]
+    },
+    {
+      "name": "Supported type?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "7e7343bd-410a-4f5f-894d-38b6447b2c80",
+              "leftValue": "={{ $json.mimeType }}",
+              "rightValue": "application/pdf",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            },
+            {
+              "id": "376a64f7-efdc-4866-bdef-7f81d0ce0c4a",
+              "leftValue": "={{ $json.mimeType }}",
+              "rightValue": "image/",
+              "operator": {
+                "type": "string",
+                "operation": "startsWith"
+              }
+            }
+          ],
+          "combinator": "or"
+        },
+        "options": {}
+      },
+      "id": "782094ee-b541-4f34-9223-dca59c95f37b",
+      "position": [
+        440,
+        0
+      ]
+    },
+    {
+      "name": "Unsupported (dropped)",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "parameters": {},
+      "id": "b905f97e-a3e1-411a-99a0-c642ea76efa1",
+      "position": [
+        660,
+        200
+      ]
+    },
+    {
+      "name": "Read Invoices",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "executeOnce": true,
+      "alwaysOutputData": true,
+      "parameters": {
+        "operation": "read",
+        "documentId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $env.SHEET_ID }}"
+        },
+        "sheetName": {
+          "__rl": true,
+          "mode": "name",
+          "value": "Invoices"
+        },
+        "options": {}
+      },
+      "id": "8ca2b168-0db3-4252-a2d1-a11b9f9c5a07",
+      "position": [
+        880,
+        0
+      ]
+    },
+    {
+      "name": "Skip processed",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "// <lib>\n// Re-polling must not duplicate rows. Kept free of require/import so the file\n// can be injected into an n8n Code node unchanged.\n\nfunction filterUnprocessed(items, rows) {\n  const key = (r) => `${r.messageId}:${r.fileName}`;\n  const seen = new Set(rows.map(key));\n  return items.filter((item) => !seen.has(key(item.json)));\n}\n// </lib>\n\nreturn filterUnprocessed($('Supported type?').all(), $('Read Invoices').all().map((r) => r.json));"
+      },
+      "id": "c8e9f773-2d16-4076-aff0-85e1859a2d43",
+      "position": [
+        1100,
+        0
+      ]
+    },
+    {
+      "name": "To base64",
+      "type": "n8n-nodes-base.extractFromFile",
+      "typeVersion": 1.1,
+      "parameters": {
+        "operation": "binaryToPropery",
+        "destinationKey": "base64",
+        "options": {
+          "keepSource": "both"
+        }
+      },
+      "id": "b936b2a6-6011-4c6d-a569-7872c076b091",
+      "position": [
+        1320,
+        0
+      ]
+    },
+    {
+      "name": "Is PDF?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "5a47aafd-99d2-4d60-bd48-8930aa7c909d",
+              "leftValue": "={{ $json.mimeType }}",
+              "rightValue": "application/pdf",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "1e60d24a-d0d9-4c66-b8eb-f77befef2d48",
+      "position": [
+        1540,
+        0
+      ]
+    },
+    {
+      "name": "Extract PDF text",
+      "type": "n8n-nodes-base.extractFromFile",
+      "typeVersion": 1.1,
+      "parameters": {
+        "operation": "pdf",
+        "options": {
+          "keepSource": "json"
+        }
+      },
+      "id": "f3643ed1-1c20-4ced-b296-8a301c440e06",
+      "position": [
+        1760,
+        0
+      ]
+    },
+    {
+      "name": "Join",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "parameters": {},
+      "id": "f83b1ae5-3a8b-4c32-9f18-c3ee9bdfdc65",
+      "position": [
+        1980,
+        0
+      ]
+    },
+    {
+      "name": "Build request",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "// The prompt and schema live here so the first call and the retry send the identical body.\nconst PROMPT = \"You read one Brazilian payment document: an NF-e DANFE, a bank slip (boleto) or something else.\\nReturn JSON that matches the response schema. Rules:\\n- documentType: \\\"nfe\\\" for a DANFE, \\\"boleto\\\" for a bank slip, \\\"other\\\" for anything else.\\n- vendorName: the issuer (emitente) of an NF-e, or the beneficiary (beneficiario/cedente) of a boleto.\\n- vendorTaxId: the vendor's CNPJ exactly as printed.\\n- amount: the total payable in BRL as a number with a dot decimal separator. Brazilian \\\"1.234,56\\\" means 1234.56. For an NF-e use the total of the note; for a boleto use the document value (valor do documento).\\n- dueDate: YYYY-MM-DD. For a boleto, the due date (vencimento). For an NF-e that lists exactly one installment (duplicata/fatura), that installment's date; if it lists more than one installment, null (keep the total amount); if it lists none, null.\\n- issueDate: YYYY-MM-DD issue date (data de emissao), or null.\\n- category: the best fit for what was bought or billed.\\n- digitableLine: the boleto's 47-digit typeable line (linha digitavel) as printed; null for non-boletos.\\n- boletoCount: how many distinct boletos the file contains (0 when none).\\n- sources: for amount, dueDate and vendorTaxId, copy verbatim the exact text you read the value from; null when the value is null.\\nNever guess. Use null for any value that is not visible in the document.\";\nconst SCHEMA = {\n  \"type\": \"OBJECT\",\n  \"properties\": {\n    \"documentType\": {\n      \"type\": \"STRING\",\n      \"enum\": [\n        \"nfe\",\n        \"boleto\",\n        \"other\"\n      ]\n    },\n    \"vendorName\": {\n      \"type\": \"STRING\",\n      \"nullable\": true\n    },\n    \"vendorTaxId\": {\n      \"type\": \"STRING\",\n      \"nullable\": true\n    },\n    \"amount\": {\n      \"type\": \"NUMBER\",\n      \"nullable\": true\n    },\n    \"dueDate\": {\n      \"type\": \"STRING\",\n      \"nullable\": true,\n      \"description\": \"YYYY-MM-DD\"\n    },\n    \"issueDate\": {\n      \"type\": \"STRING\",\n      \"nullable\": true,\n      \"description\": \"YYYY-MM-DD\"\n    },\n    \"category\": {\n      \"type\": \"STRING\",\n      \"enum\": [\n        \"utilities\",\n        \"rent\",\n        \"software\",\n        \"services\",\n        \"supplies\",\n        \"taxes\",\n        \"other\"\n      ]\n    },\n    \"digitableLine\": {\n      \"type\": \"STRING\",\n      \"nullable\": true\n    },\n    \"boletoCount\": {\n      \"type\": \"INTEGER\"\n    },\n    \"sources\": {\n      \"type\": \"OBJECT\",\n      \"properties\": {\n        \"amount\": {\n          \"type\": \"STRING\",\n          \"nullable\": true\n        },\n        \"dueDate\": {\n          \"type\": \"STRING\",\n          \"nullable\": true\n        },\n        \"vendorTaxId\": {\n          \"type\": \"STRING\",\n          \"nullable\": true\n        }\n      },\n      \"required\": [\n        \"amount\",\n        \"dueDate\",\n        \"vendorTaxId\"\n      ]\n    }\n  },\n  \"required\": [\n    \"documentType\",\n    \"vendorName\",\n    \"vendorTaxId\",\n    \"amount\",\n    \"dueDate\",\n    \"issueDate\",\n    \"category\",\n    \"digitableLine\",\n    \"boletoCount\",\n    \"sources\"\n  ]\n};\nreturn {\n  json: {\n    messageId: $json.messageId,\n    fileName: $json.fileName,\n    pdfText: $json.text ?? null,\n    body: {\n      contents: [{ parts: [{ text: PROMPT }, { inline_data: { mime_type: $json.mimeType, data: $json.base64 } }] }],\n      generationConfig: { responseMimeType: 'application/json', responseSchema: SCHEMA },\n    },\n  },\n};"
+      },
+      "id": "58f22642-3183-4ff3-8c1d-494b83a678a9",
+      "position": [
+        2200,
+        0
+      ]
+    },
+    {
+      "name": "Gemini extract",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "onError": "continueErrorOutput",
+      "parameters": {
+        "method": "POST",
+        "url": "=https://generativelanguage.googleapis.com/v1beta/models/{{ $env.GEMINI_MODEL }}:generateContent",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.body) }}",
+        "options": {
+          "batching": {
+            "batch": {
+              "batchSize": 1,
+              "batchInterval": 4000
+            }
+          },
+          "timeout": 120000
+        }
+      },
+      "id": "e25ab295-c553-485b-963d-6ad1b0f904ea",
+      "position": [
+        2420,
+        0
+      ]
+    },
+    {
+      "name": "Valid JSON?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "a8efa8fd-dc69-4034-be5f-d181f0fbd91d",
+              "leftValue": "={{ (() => { try { JSON.parse(($json.candidates?.[0]?.content?.parts ?? []).map(p => p.text ?? '').join('')); return true; } catch (e) { return false; } })() }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "9d3d4b75-e66a-482b-a5ff-eab8737b348f",
+      "position": [
+        2640,
+        0
+      ]
+    },
+    {
+      "name": "Gemini retry",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "onError": "continueErrorOutput",
+      "parameters": {
+        "method": "POST",
+        "url": "=https://generativelanguage.googleapis.com/v1beta/models/{{ $env.GEMINI_MODEL }}:generateContent",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($('Build request').item.json.body) }}",
+        "options": {
+          "batching": {
+            "batch": {
+              "batchSize": 1,
+              "batchInterval": 4000
+            }
+          },
+          "timeout": 120000
+        }
+      },
+      "id": "76d44529-a279-4b30-b6a0-276d910b9a60",
+      "position": [
+        2860,
+        0
+      ]
+    },
+    {
+      "name": "Validate",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "// <lib>\n// Pure validators. Kept free of require/import so the file can be pasted\n// into an n8n Code node unchanged.\n\nconst CNPJ_WEIGHTS_1 = [5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2];\nconst CNPJ_WEIGHTS_2 = [6, 5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2];\nconst CNPJ_PATTERN = /^[0-9A-Z]{12}[0-9]{2}$/;\nconst BOLETO_LINE_LENGTH = 47;\nconst FACTOR_RESET_MIN = 1000; // factor restarted at 1000 after 9999 on 2025-02-21\nconst MS_PER_DAY = 86400000;\nconst PRE_RESET_BASE = '1997-10-07'; // factor 0 of the original scheme\nconst POST_RESET_BASE = '2025-02-22'; // factor 1000 of the restarted scheme\nconst MAX_DUE_DATE_DRIFT_DAYS = 365;\nconst REFERENCE_TIME_ZONE = 'America/Sao_Paulo';\nconst ISO_DATE_PATTERN = /^\\d{4}-\\d{2}-\\d{2}$/;\nconst REQUIRED_FIELDS = {\n  boleto: ['amount', 'dueDate', 'digitableLine'],\n  nfe: ['vendorTaxId', 'amount'],\n  other: ['amount'],\n};\n\nfunction cnpjDigit(chars, weights) {\n  // Alphanumeric CNPJ: character value is charCode - 48 ('0'..'9' -> 0..9, 'A' -> 17).\n  const sum = weights.reduce((acc, w, i) => acc + (chars.charCodeAt(i) - 48) * w, 0);\n  const r = sum % 11;\n  return r < 2 ? 0 : 11 - r;\n}\n\nfunction isValidCnpj(value) {\n  const cnpj = String(value).replace(/[./\\-\\s]/g, '').toUpperCase();\n  if (!CNPJ_PATTERN.test(cnpj) || /^(.)\\1{13}$/.test(cnpj)) return false;\n  const d1 = cnpjDigit(cnpj, CNPJ_WEIGHTS_1);\n  const d2 = cnpjDigit(cnpj, CNPJ_WEIGHTS_2);\n  return cnpj[12] === String(d1) && cnpj[13] === String(d2);\n}\n\nfunction mod10(digits) {\n  let sum = 0;\n  for (let i = 0; i < digits.length; i++) {\n    const p = Number(digits[digits.length - 1 - i]) * (i % 2 === 0 ? 2 : 1);\n    sum += p > 9 ? p - 9 : p;\n  }\n  return (10 - (sum % 10)) % 10;\n}\n\nfunction mod11Barcode(digits43) {\n  let sum = 0;\n  for (let i = 0; i < digits43.length; i++) {\n    sum += Number(digits43[digits43.length - 1 - i]) * (2 + (i % 8));\n  }\n  const dv = 11 - (sum % 11);\n  return dv === 0 || dv === 10 || dv === 11 ? 1 : dv;\n}\n\nfunction addDays(isoDate, days) {\n  return new Date(Date.parse(isoDate) + days * MS_PER_DAY).toISOString().slice(0, 10);\n}\n\nfunction decodeDueDate(factor, referenceDate) {\n  if (factor === 0) return null;\n  // The factor wraps, so the same number can mean two dates; pick the one nearest the reference.\n  const candidates = [addDays(PRE_RESET_BASE, factor)];\n  if (factor >= FACTOR_RESET_MIN) candidates.push(addDays(POST_RESET_BASE, factor - FACTOR_RESET_MIN));\n  const distance = (d) => Math.abs(Date.parse(d) - Date.parse(referenceDate));\n  return candidates.sort((a, b) => distance(a) - distance(b))[0];\n}\n\nfunction parseDigitableLine(line, referenceDate) {\n  const d = String(line).replace(/\\D/g, '');\n  if (d.length !== BOLETO_LINE_LENGTH) return null; // also rejects 48-digit convenio lines\n  const fields = [d.slice(0, 9), d.slice(10, 20), d.slice(21, 31)];\n  const fieldDvs = [d[9], d[20], d[31]];\n  if (fields.some((f, i) => String(mod10(f)) !== fieldDvs[i])) return null;\n  const barcodeNoDv = d.slice(0, 4) + d.slice(33) + d.slice(4, 9) + d.slice(10, 20) + d.slice(21, 31);\n  if (String(mod11Barcode(barcodeNoDv)) !== d[32]) return null;\n  const factor = Number(d.slice(33, 37));\n  const cents = Number(d.slice(37));\n  return {\n    amount: cents === 0 ? null : cents / 100,\n    dueDate: decodeDueDate(factor, referenceDate),\n  };\n}\n\nfunction referenceDateOf(processedAt) {\n  // en-CA formats as YYYY-MM-DD; the zone keeps late-evening runs on the Brazilian calendar day.\n  return new Intl.DateTimeFormat('en-CA', { timeZone: REFERENCE_TIME_ZONE }).format(new Date(processedAt));\n}\n\nfunction isRealIsoDate(value) {\n  return ISO_DATE_PATTERN.test(value) && addDays(value, 0) === value;\n}\n\nfunction normalizeTaxId(value) {\n  return value == null ? null : String(value).replace(/[./\\-\\s]/g, '').toUpperCase();\n}\n\nfunction formatCnpj(c) {\n  return `${c.slice(0, 2)}.${c.slice(2, 5)}.${c.slice(5, 8)}/${c.slice(8, 12)}-${c.slice(12)}`;\n}\n\nfunction formatBrl(amount) {\n  const [int, frac] = amount.toFixed(2).split('.');\n  return { plain: `${int},${frac}`, grouped: `${int.replace(/\\B(?=(\\d{3})+$)/g, '.')},${frac}` };\n}\n\nfunction amountInText(amount, text) {\n  const { plain, grouped } = formatBrl(amount);\n  const esc = (s) => s.replace(/\\./g, '\\\\.');\n  // Boundaries stop \"1.234,56\" from matching inside \"11.234,56\" or \"1.234,567\".\n  const re = new RegExp(`(?<![\\\\d.,])(?:${esc(grouped)}|${esc(plain)})(?!\\\\d|,\\\\d)`);\n  return re.test(text);\n}\n\nfunction applyLine(x, referenceDate, fail) {\n  if (x.digitableLine == null) return;\n  const line = parseDigitableLine(x.digitableLine, referenceDate);\n  if (!line) { fail('digitable_line_invalid'); x.digitableLine = null; return; }\n  x.digitableLine = String(x.digitableLine).replace(/\\D/g, '');\n  for (const f of ['amount', 'dueDate']) {\n    if (line[f] == null) continue;\n    if (x[f] != null && x[f] !== line[f]) fail(f === 'amount' ? 'amount_mismatch_line' : 'due_date_mismatch_line');\n    x[f] = line[f];\n  }\n}\n\nfunction checkAmountAndDate(x, referenceDate, fail) {\n  if (x.amount != null) {\n    x.amount = Math.round(Number(x.amount) * 100) / 100;\n    if (!(x.amount > 0)) { fail('amount_invalid'); x.amount = null; }\n  }\n  if (x.dueDate == null) return;\n  if (!isRealIsoDate(x.dueDate)) { fail('due_date_invalid'); x.dueDate = null; return; }\n  const days = Math.abs(Date.parse(x.dueDate) - Date.parse(referenceDate)) / MS_PER_DAY;\n  if (days > MAX_DUE_DATE_DRIFT_DAYS) { fail('due_date_out_of_range'); x.dueDate = null; }\n}\n\nfunction groundInText(x, pdfText, fail) {\n  if (typeof pdfText !== 'string' || pdfText === '') return;\n  if (x.amount != null && !amountInText(x.amount, pdfText)) { fail('amount_not_in_text'); x.amount = null; }\n  if (x.vendorTaxId != null && !pdfText.includes(x.vendorTaxId) && !pdfText.includes(formatCnpj(x.vendorTaxId))) {\n    fail('cnpj_not_in_text'); x.vendorTaxId = null;\n  }\n}\n\nfunction payableStatus(x) {\n  if (x.documentType === 'boleto') return 'pending';\n  return x.documentType === 'other' && x.dueDate != null ? 'pending' : 'n/a';\n}\n\nfunction validateExtraction(extraction, ctx) {\n  const reasons = [];\n  const fail = (code) => { if (!reasons.includes(code)) reasons.push(code); };\n  const x = { ...extraction, vendorTaxId: normalizeTaxId(extraction.vendorTaxId) };\n  const referenceDate = referenceDateOf(ctx.processedAt);\n\n  if (x.vendorTaxId != null && !isValidCnpj(x.vendorTaxId)) { fail('cnpj_invalid'); x.vendorTaxId = null; }\n  applyLine(x, referenceDate, fail);\n  checkAmountAndDate(x, referenceDate, fail);\n  groundInText(x, ctx.pdfText, fail);\n  if (x.boletoCount > 1) fail('multiple_boletos');\n  // Checked after nulling so a field rejected above also counts as missing.\n  for (const f of REQUIRED_FIELDS[x.documentType] || []) if (x[f] == null) fail(`missing_${f}`);\n\n  const record = {\n    documentType: x.documentType, vendorName: x.vendorName, vendorTaxId: x.vendorTaxId,\n    amount: x.amount, dueDate: x.dueDate, category: x.category, digitableLine: x.digitableLine,\n    status: payableStatus(x),\n  };\n  return { record, reasons, extractionStatus: reasons.length ? 'needs_review' : 'ok' };\n}\n// </lib>\n\n// Glue: turns a Gemini response (or an HTTP error) into one Invoices row.\n// Every input yields a row, so no document vanishes silently.\nconst ctx = $('Build request').item.json;\nconst receivedAt = new Date().toISOString();\nconst base = { receivedAt, messageId: ctx.messageId, fileName: ctx.fileName };\nconst EMPTY = { documentType: '', vendorName: '', vendorTaxId: '', amount: '', dueDate: '', category: '', digitableLine: '', status: '' };\n\nfunction errorRow(reason) {\n  return { json: { ...base, ...EMPTY, extractionStatus: 'error', reviewReasons: reason } };\n}\n\nfunction errorMessage(err) {\n  if (typeof err === 'string') return err;\n  return [err.message, err.description].filter(Boolean).join(': ') || 'HTTP request failed';\n}\n\nfunction parseGemini(json) {\n  const text = (json.candidates?.[0]?.content?.parts ?? []).map((p) => p.text ?? '').join('');\n  return JSON.parse(text);\n}\n\nif ($json.error) return errorRow(`gemini_request_failed: ${errorMessage($json.error)}`);\nlet extraction;\ntry {\n  extraction = parseGemini($json);\n} catch (e) {\n  return errorRow(`gemini_invalid_json: ${e.message}`);\n}\ntry {\n  const { record, reasons, extractionStatus } = validateExtraction(extraction, { pdfText: ctx.pdfText, processedAt: receivedAt });\n  const row = Object.fromEntries(Object.entries(record).map(([k, v]) => [k, v ?? '']));\n  return { json: { ...base, ...row, extractionStatus, reviewReasons: reasons.join('; ') } };\n} catch (e) {\n  return errorRow(`validation_failed: ${e.message}`);\n}"
+      },
+      "id": "4003ebd9-8ea7-40b1-b197-f73fd332b5b6",
+      "position": [
+        3080,
+        0
+      ]
+    },
+    {
+      "name": "Append to Invoices",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $env.SHEET_ID }}"
+        },
+        "sheetName": {
+          "__rl": true,
+          "mode": "name",
+          "value": "Invoices"
+        },
+        "columns": {
+          "mappingMode": "autoMapInputData",
+          "value": {},
+          "matchingColumns": [],
+          "schema": []
+        },
+        "options": {
+          "cellFormat": "RAW"
+        }
+      },
+      "id": "b915f528-4b45-4446-b9c0-04ab3387d1c4",
+      "position": [
+        3300,
+        0
+      ]
+    }
+  ],
+  "connections": {
+    "Gmail Trigger": {
+      "main": [
+        [
+          {
+            "node": "Split attachments",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Split attachments": {
+      "main": [
+        [
+          {
+            "node": "Supported type?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Supported type?": {
+      "main": [
+        [
+          {
+            "node": "Read Invoices",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Unsupported (dropped)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read Invoices": {
+      "main": [
+        [
+          {
+            "node": "Skip processed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Skip processed": {
+      "main": [
+        [
+          {
+            "node": "To base64",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "To base64": {
+      "main": [
+        [
+          {
+            "node": "Is PDF?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Is PDF?": {
+      "main": [
+        [
+          {
+            "node": "Extract PDF text",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Join",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Extract PDF text": {
+      "main": [
+        [
+          {
+            "node": "Join",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Join": {
+      "main": [
+        [
+          {
+            "node": "Build request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build request": {
+      "main": [
+        [
+          {
+            "node": "Gemini extract",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gemini extract": {
+      "main": [
+        [
+          {
+            "node": "Valid JSON?",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Validate",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Valid JSON?": {
+      "main": [
+        [
+          {
+            "node": "Validate",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Gemini retry",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gemini retry": {
+      "main": [
+        [
+          {
+            "node": "Validate",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Validate",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate": {
+      "main": [
+        [
+          {
+            "node": "Append to Invoices",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "pinData": {}
+}
