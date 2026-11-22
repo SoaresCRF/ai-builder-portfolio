@@ -174,7 +174,7 @@ The `Metrics` tab computes hours saved as `documents this month x manual minutes
 
 - A Gemini error, or invalid JSON after one retry, still writes a row with `extractionStatus = error` and the reason in `reviewReasons`.
 - If PDF text extraction fails, the document is still processed; it just has no text layer to ground against (`pdfText` is empty).
-- A Google Sheets read or append failure fails the execution.
+- A Google Sheets read or append failure fails the execution, and no row is written for that run. Once Sheets is reachable again, open the n8n Executions list and use Retry on the failed execution. Retry reruns the same email, and dedup (`messageId:fileName`) skips any attachment that was already appended.
 - An `error` row blocks re-processing of that attachment (dedup key `messageId:fileName`), and re-running from Executions does not retry it. To recover, delete the row, then re-send or forward the attachment to the `+invoices` address. The new email has a new message id, so dedup does not block it.
 - Due dates edited by hand must be typed as `YYYY-MM-DD` plain text. Any other format (or a date the sheet converted) is ignored by the digest.
 - The needs-review count in the digest excludes `paid` rows. To clear an item after reviewing it, fix the fields and set `extractionStatus` to `ok` (or mark it `paid`).
