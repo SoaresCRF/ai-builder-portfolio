@@ -23,7 +23,7 @@ function selectDueRows(rows, today, windowDays) {
     .filter((r) => r.status === 'pending' && hasValidDate(r) && r.dueDate <= limit)
     .map((r) => ({ ...r, overdue: r.dueDate < today, needsReview: isReviewStatus(r) }))
     .sort((a, b) => a.dueDate.localeCompare(b.dueDate));
-  return { dueRows, needsReviewCount: rows.filter(isReviewStatus).length };
+  return { dueRows, needsReviewCount: rows.filter((r) => isReviewStatus(r) && r.status !== 'paid').length };
 }
 
 const HTML_ESCAPES = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' };

@@ -29,8 +29,13 @@ test('selects pending rows inside the window and flags overdue', () => {
   assert.strictEqual(needsReviewCount, 1);
 });
 
-test('needsReviewCount includes error rows regardless of status', () => {
-  const rows = [row('a', '', { extractionStatus: 'error' }), row('b', '', { extractionStatus: 'needs_review', status: 'paid' })];
+test('needsReviewCount counts review and error rows that are not paid', () => {
+  const rows = [
+    row('a', '', { extractionStatus: 'error', status: 'n/a' }),
+    row('b', '', { extractionStatus: 'needs_review', status: 'paid' }),
+    row('c', '', { extractionStatus: 'needs_review' }),
+    row('d', '', { extractionStatus: 'ok' }),
+  ];
   assert.strictEqual(selectDueRows(rows, TODAY, 3).needsReviewCount, 2);
 });
 
