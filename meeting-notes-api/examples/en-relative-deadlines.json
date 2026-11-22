@@ -1,0 +1,33 @@
+{
+  "summary": "Kickoff meeting for the Nimbus Analytics reporting project where the team discussed building the weekly report first, assigning tasks for the data model, staging database, client kickoff notes, and security checklist review.",
+  "decisions": [
+    "Build the weekly report first and skip the monthly one for now"
+  ],
+  "participants": [
+    "Jonas",
+    "Elena",
+    "Sam"
+  ],
+  "actionItems": [
+    {
+      "task": "Draft the data model",
+      "owner": "Elena",
+      "dueDate": "2026-03-13"
+    },
+    {
+      "task": "Set up the staging database",
+      "owner": "Sam",
+      "dueDate": "2026-03-03"
+    },
+    {
+      "task": "Send the kickoff notes to the client",
+      "owner": "Jonas",
+      "dueDate": "2026-03-16"
+    },
+    {
+      "task": "Review the security checklist",
+      "owner": null,
+      "dueDate": null
+    }
+  ]
+}

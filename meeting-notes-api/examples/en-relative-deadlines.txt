@@ -1,0 +1,7 @@
+Jonas: Okay team, this is the kickoff for the Nimbus Analytics reporting project.
+Elena: We agreed to build the weekly report first and skip the monthly one for now.
+Jonas: Elena, please draft the data model by next Friday.
+Elena: Will do. And Sam, can you set up the staging database by tomorrow?
+Sam: Yes, I will have the staging database ready tomorrow.
+Jonas: I will send the kickoff notes to the client within two weeks.
+Sam: Someone should also review the security checklist, no deadline yet.

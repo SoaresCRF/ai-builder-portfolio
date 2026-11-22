@@ -1,0 +1,7 @@
+Maria: Thanks for joining the Orbital Widgets product sync. Main topic today is the launch of the new dashboard.
+Tom: Beta feedback is good. Three customers asked for CSV export, but I think it can wait until after launch.
+Maria: Agreed. We decided to ship the dashboard on March 14 without CSV export. Export goes into the next release.
+Priya: I will finish the onboarding emails by March 7. Tom, can you update the pricing page?
+Tom: Sure, I will update the pricing page before the launch.
+Maria: Great. Someone also needs to tell support about the new dashboard, but we have not picked who.
+Priya: Let's revisit that next week.

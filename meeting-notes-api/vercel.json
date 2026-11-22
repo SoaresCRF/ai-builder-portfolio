@@ -1,0 +1,3 @@
+{
+  "functions": { "api/notes.ts": { "maxDuration": 60 } }
+}

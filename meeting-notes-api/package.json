@@ -1,0 +1,24 @@
+{
+  "name": "meeting-notes-api",
+  "version": "1.0.0",
+  "description": "Serverless API that turns meeting transcripts into grounded structured notes with Gemini.",
+  "scripts": {
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "keywords": [],
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "dependencies": {
+    "@google/genai": "3.6.1",
+    "zod": "4.6.7"
+  },
+  "devDependencies": {
+    "@types/node": "26.6.6",
+    "typescript": "7.0.2",
+    "vitest": "5.1.1"
+  },
+  "private": true
+}

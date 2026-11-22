@@ -1,0 +1,165 @@
+openapi: 3.1.0
+info:
+  title: Meeting Notes API
+  version: 1.0.0
+  description: >
+    Turns a raw meeting transcript into structured notes (summary, decisions,
+    participants, action items) using Gemini, then grounds the result against
+    the transcript so owners and due dates are never invented.
+servers:
+  - url: https://meeting-notes-api-mu.vercel.app
+    description: Production
+  - url: http://localhost:3000
+    description: Local (vercel dev)
+security:
+  - ApiKeyAuth: []
+paths:
+  /api/notes:
+    post:
+      operationId: createNotes
+      summary: Extract structured notes from a transcript
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/NotesRequest"
+            examples:
+              withMeetingDate:
+                summary: Relative deadlines resolved against meetingDate
+                value:
+                  transcript: "Jonas: Elena, please draft the data model by next Friday.\nElena: Will do."
+                  meetingDate: "2026-03-02"
+      responses:
+        "200":
+          description: Structured notes
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NotesResponse"
+              examples:
+                portuguese:
+                  summary: Portuguese transcript, no meetingDate (examples/pt-reuniao-semanal.json)
+                  value:
+                    summary: "Reunião semanal da Padaria Lua Nova onde discutiram o aumento do preço da farinha, decidiram manter os preços do pão e negociar com um segundo fornecedor, além de distribuir tarefas de orçamento e atualização do cardápio."
+                    decisions:
+                      - "Manter os preços do pão por enquanto"
+                      - "Negociar com um segundo fornecedor"
+                    participants: [Carla, Rui, Ana]
+                    actionItems:
+                      - { task: "Pedir orçamento a dois fornecedores", owner: Rui, dueDate: null }
+                      - { task: "Atualizar o cardápio da loja online", owner: Ana, dueDate: null }
+                      - { task: "Comprar uma nova batedeira", owner: null, dueDate: null }
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "405":
+          $ref: "#/components/responses/MethodNotAllowed"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "500":
+          $ref: "#/components/responses/InternalError"
+        "502":
+          $ref: "#/components/responses/UpstreamError"
+components:
+  securitySchemes:
+    ApiKeyAuth:
+      type: apiKey
+      in: header
+      name: x-api-key
+  schemas:
+    NotesRequest:
+      type: object
+      required: [transcript]
+      properties:
+        transcript:
+          type: string
+          minLength: 1
+          maxLength: 50000
+          description: Meeting transcript (trimmed; must not be empty).
+        meetingDate:
+          type: string
+          format: date
+          description: >
+            Optional meeting date (YYYY-MM-DD). Required to resolve relative
+            deadlines such as "next Friday"; without it they become null.
+    ActionItem:
+      type: object
+      required: [task, owner, dueDate]
+      properties:
+        task:
+          type: string
+        owner:
+          type: [string, "null"]
+          description: Null when no owner is stated in the transcript.
+        dueDate:
+          type: [string, "null"]
+          format: date
+          description: Null when no deadline is stated or it cannot be grounded. Without meetingDate, a date is kept only if its source phrase states both day and 4-digit year.
+    NotesResponse:
+      type: object
+      required: [summary, decisions, participants, actionItems]
+      properties:
+        summary:
+          type: string
+        decisions:
+          type: array
+          items: { type: string }
+        participants:
+          type: array
+          items: { type: string }
+        actionItems:
+          type: array
+          items:
+            $ref: "#/components/schemas/ActionItem"
+    ErrorResponse:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code:
+              type: string
+              enum: [invalid_request, unauthorized, method_not_allowed, rate_limited, upstream_error, internal_error]
+            message:
+              type: string
+  responses:
+    InvalidRequest:
+      description: Body is not valid JSON or fails validation.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/ErrorResponse" }
+          example: { error: { code: invalid_request, message: Invalid request body } }
+    Unauthorized:
+      description: Missing or wrong x-api-key.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/ErrorResponse" }
+          example: { error: { code: unauthorized, message: Invalid or missing API key } }
+    MethodNotAllowed:
+      description: Only POST is supported.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/ErrorResponse" }
+          example: { error: { code: method_not_allowed, message: Use POST } }
+    RateLimited:
+      description: Gemini free-tier quota reached; retry later.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/ErrorResponse" }
+          example: { error: { code: rate_limited, message: "Rate limit reached, retry later" } }
+    UpstreamError:
+      description: The model call failed, timed out or returned invalid output.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/ErrorResponse" }
+          example: { error: { code: upstream_error, message: Upstream model failure } }
+    InternalError:
+      description: Unexpected error or misconfigured deployment.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/ErrorResponse" }
+          example: { error: { code: internal_error, message: Internal server error } }

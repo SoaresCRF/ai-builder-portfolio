@@ -1,0 +1,29 @@
+{
+  "summary": "Reunião semanal da Padaria Lua Nova onde discutiram o aumento do preço da farinha, decidiram manter os preços do pão e negociar com um segundo fornecedor, além de distribuir tarefas de orçamento e atualização do cardápio.",
+  "decisions": [
+    "Manter os preços do pão por enquanto",
+    "Negociar com um segundo fornecedor"
+  ],
+  "participants": [
+    "Carla",
+    "Rui",
+    "Ana"
+  ],
+  "actionItems": [
+    {
+      "task": "Pedir orçamento a dois fornecedores",
+      "owner": "Rui",
+      "dueDate": null
+    },
+    {
+      "task": "Atualizar o cardápio da loja online",
+      "owner": "Ana",
+      "dueDate": null
+    },
+    {
+      "task": "Comprar uma nova batedeira",
+      "owner": null,
+      "dueDate": null
+    }
+  ]
+}

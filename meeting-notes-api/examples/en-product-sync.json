@@ -1,0 +1,24 @@
+{
+  "summary": "Maria, Tom, and Priya held a product sync for Orbital Widgets to discuss the new dashboard launch, agreeing to ship on March 14 without CSV export and assigning tasks for onboarding emails and the pricing page.",
+  "decisions": [
+    "Ship the dashboard on March 14 without CSV export.",
+    "Put CSV export into the next release."
+  ],
+  "participants": [
+    "Maria",
+    "Tom",
+    "Priya"
+  ],
+  "actionItems": [
+    {
+      "task": "Finish the onboarding emails",
+      "owner": "Priya",
+      "dueDate": null
+    },
+    {
+      "task": "Update the pricing page",
+      "owner": "Tom",
+      "dueDate": null
+    }
+  ]
+}
