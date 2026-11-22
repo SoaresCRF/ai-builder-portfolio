@@ -148,3 +148,21 @@ test('CNPJ grounding accepts formatted or digits', () => {
 test('empty pdfText skips text grounding', () => {
   assert.ok(!run(NFE, '').reasons.some((x) => x.endsWith('_not_in_text')));
 });
+test('impossible calendar dates are flagged, not thrown', () => {
+  for (const d of ['2026-13-01', '2026-02-32', '2026-00-10']) {
+    const r = run({ ...NFE, dueDate: d });
+    assert.ok(r.reasons.includes('due_date_invalid'), d); assert.equal(r.record.dueDate, null);
+    assert.notEqual(r.record.status, 'error');
+  }
+});
+test('amount grounding rejects 1.123,45 for 123.45', () => {
+  const r = run({ ...NFE, amount: 123.45 }, 'Total 1.123,45 CNPJ 11.222.333/0001-81');
+  assert.ok(r.reasons.includes('amount_not_in_text'));
+});
+test('range check uses the Sao Paulo calendar day', () => {
+  const at = '2026-11-23T02:00:00Z'; // still 2026-11-22 in Sao Paulo
+  const inRange = validateExtraction({ ...NFE, dueDate: '2027-11-22' }, { pdfText: null, processedAt: at });
+  assert.ok(!inRange.reasons.includes('due_date_out_of_range'));
+  const out = validateExtraction({ ...NFE, dueDate: '2027-11-23' }, { pdfText: null, processedAt: at });
+  assert.ok(out.reasons.includes('due_date_out_of_range'));
+});

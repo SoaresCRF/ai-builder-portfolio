@@ -86,7 +86,7 @@ function referenceDateOf(processedAt) {
 }
 
 function isRealIsoDate(value) {
-  return ISO_DATE_PATTERN.test(value) && addDays(value, 0) === value;
+  return ISO_DATE_PATTERN.test(value) && !Number.isNaN(Date.parse(value)) && addDays(value, 0) === value;
 }
 
 function normalizeTaxId(value) {
