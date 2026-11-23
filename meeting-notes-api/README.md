@@ -103,9 +103,9 @@ Fictional transcripts in [`examples/`](examples/), each with the real API output
 
 ## Screenshots / demo
 
-Live deployment: `https://meeting-notes-api-mu.vercel.app/api/notes` (requires an `x-api-key`, so it is not open to the public).
+The API was deployed to Vercel at `https://meeting-notes-api-mu.vercel.app/api/notes` (behind an `x-api-key`). That deployment is now offline; to run it yourself, see [Run locally](#run-locally) or [Deploy](#deploy).
 
-Real responses from that deployment: a valid request (200 with security headers and grounded notes, sent with `meetingDate` `2026-11-20`, a Friday), a missing key (401) and a `GET` (405).
+Real responses captured from that deployment: a valid request (200 with security headers and grounded notes, sent with `meetingDate` `2026-11-20`, a Friday), a missing key (401) and a `GET` (405).
 
 ![Demo of live requests and responses](docs/media/demo.gif)
 
